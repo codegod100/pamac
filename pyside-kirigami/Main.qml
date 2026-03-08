@@ -9,6 +9,8 @@ Kirigami.ApplicationWindow {
     width: 800
     height: 600
 
+    property var selectedPackage: null
+
     pageStack.initialPage: Kirigami.ScrollablePage {
         title: qsTr("Software Management")
 
@@ -42,7 +44,6 @@ Kirigami.ApplicationWindow {
             onTriggered: searchField.forceActiveFocus()
         }
 
-        // Debounce search to keep UI snappy
         Timer {
             id: searchDelay
             interval: 300
@@ -95,6 +96,87 @@ Kirigami.ApplicationWindow {
                         wrapMode: Text.WordWrap
                         Layout.fillWidth: true
                         visible: model.description !== ""
+                    }
+                }
+                onClicked: {
+                    var details = pamacBackend.get_package_details(model.name, model.repository)
+                    if (details) {
+                        root.selectedPackage = details
+                        detailsSheet.open()
+                    }
+                }
+            }
+        }
+    }
+
+    Kirigami.OverlaySheet {
+        id: detailsSheet
+        title: selectedPackage ? selectedPackage.name : ""
+        
+        ColumnLayout {
+            width: root.width * 0.8
+            spacing: Kirigami.Units.largeSpacing
+
+            Kirigami.Heading {
+                text: selectedPackage ? selectedPackage.version : ""
+                level: 3
+                Layout.fillWidth: true
+            }
+
+            Kirigami.FormLayout {
+                Layout.fillWidth: true
+                
+                Label {
+                    Kirigami.FormData.label: qsTr("Description:")
+                    text: selectedPackage ? selectedPackage.description : ""
+                    wrapMode: Text.WordWrap
+                    Layout.fillWidth: true
+                }
+                Label {
+                    Kirigami.FormData.label: qsTr("Repository:")
+                    text: selectedPackage ? selectedPackage.repository : ""
+                }
+                Label {
+                    Kirigami.FormData.label: qsTr("URL:")
+                    text: selectedPackage ? selectedPackage.url : ""
+                    color: Kirigami.Theme.linkByMouseColor
+                    elide: Text.ElideRight
+                    Layout.fillWidth: true
+                }
+                Label {
+                    Kirigami.FormData.label: qsTr("License:")
+                    text: selectedPackage ? selectedPackage.license : ""
+                }
+                Label {
+                    Kirigami.FormData.label: qsTr("Maintainer:")
+                    text: selectedPackage ? selectedPackage.maintainer : ""
+                }
+                Label {
+                    visible: selectedPackage && selectedPackage.repository === "AUR"
+                    Kirigami.FormData.label: qsTr("Votes:")
+                    text: selectedPackage ? selectedPackage.votes : ""
+                }
+                Label {
+                    visible: selectedPackage && selectedPackage.repository === "AUR"
+                    Kirigami.FormData.label: qsTr("Popularity:")
+                    text: selectedPackage ? selectedPackage.popularity : ""
+                }
+            }
+
+            Kirigami.Heading {
+                text: qsTr("Dependencies")
+                level: 4
+                visible: selectedPackage && selectedPackage.depends && selectedPackage.depends.length > 0
+            }
+
+            Flow {
+                Layout.fillWidth: true
+                spacing: Kirigami.Units.smallSpacing
+                visible: selectedPackage && selectedPackage.depends && selectedPackage.depends.length > 0
+                Repeater {
+                    model: selectedPackage ? selectedPackage.depends : []
+                    delegate: Kirigami.Badge {
+                        text: modelData
                     }
                 }
             }

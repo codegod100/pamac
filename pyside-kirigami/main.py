@@ -21,8 +21,6 @@ class PamacBackend(QObject):
         super().__init__()
         
         system_pacman_conf = "/etc/pacman.conf"
-        system_db_path = "/var/lib/pacman/"
-        
         user_config_dir = os.path.expanduser("~/.config/pamac")
         self.user_db_path = os.path.expanduser("~/.local/share/pamac")
         self.sync_dir = os.path.join(self.user_db_path, "sync")
@@ -30,27 +28,18 @@ class PamacBackend(QObject):
         os.makedirs(user_config_dir, exist_ok=True)
         os.makedirs(self.sync_dir, exist_ok=True)
         
-        # Setup environment variables for libpamac
-        if os.path.exists(system_pacman_conf) and os.path.exists(system_db_path):
-            os.environ["PACMAN_CONF"] = system_pacman_conf
-            os.environ["PACMAN_DBPATH"] = system_db_path
-            self.is_arch = True
-        else:
-            os.environ["PACMAN_CONF"] = os.path.join(user_config_dir, "pacman.conf")
-            os.environ["PACMAN_DBPATH"] = self.user_db_path
-            self.is_arch = False
-
+        # Setup environment
+        os.environ["PACMAN_DBPATH"] = self.user_db_path
+        os.environ["PACMAN_CONF"] = os.path.join(user_config_dir, "pacman.conf")
         self.conf_path = os.path.join(user_config_dir, "pamac.conf")
         os.environ["PAMAC_CONF"] = self.conf_path
 
         # Setup local pacman.conf if not on Arch
-        if not self.is_arch:
-            user_pacman_conf = os.environ["PACMAN_CONF"]
-            if not os.path.exists(user_pacman_conf):
-                with open(user_pacman_conf, 'w') as f:
-                    f.write(f"[options]\nDBPath = {self.user_db_path}\nSigLevel = Never\n\n"
-                            "[core]\nServer = https://mirrors.kernel.org/archlinux/$repo/os/$arch\n"
-                            "[extra]\nServer = https://mirrors.kernel.org/archlinux/$repo/os/$arch\n")
+        if not os.path.exists(os.environ["PACMAN_CONF"]):
+            with open(os.environ["PACMAN_CONF"], 'w') as f:
+                f.write(f"[options]\nDBPath = {self.user_db_path}\nSigLevel = Never\n\n"
+                        "[core]\nServer = https://mirrors.kernel.org/archlinux/$repo/os/$arch\n"
+                        "[extra]\nServer = https://mirrors.kernel.org/archlinux/$repo/os/$arch\n")
 
         if not os.path.exists(self.conf_path):
             with open(self.conf_path, 'w') as f:
@@ -65,41 +54,67 @@ class PamacBackend(QObject):
         threading.Thread(target=self._bg_maintenance, daemon=True).start()
 
     def _bg_maintenance(self):
-        if not self.is_arch:
-            self._ensure_local_databases(self.user_db_path)
-        else:
-            sync_dir = os.path.expanduser("~/.local/share/pamac/sync")
-            os.makedirs(sync_dir, exist_ok=True)
-            self._download_aur_metadata(sync_dir)
+        # Symlink system DBs if possible
+        system_sync = "/var/lib/pacman/sync"
+        if os.path.exists(system_sync):
+            for db in ["core.db", "extra.db"]:
+                src = os.path.join(system_sync, db)
+                dst = os.path.join(self.sync_dir, db)
+                if os.path.exists(src) and not os.path.exists(dst):
+                    try: os.symlink(src, dst)
+                    except: pass
+
+        # Ensure AUR metadata
+        aur_dest = os.path.join(self.sync_dir, "packages-meta-ext-v1.json.gz")
+        if not os.path.exists(aur_dest):
+            self.status_message.emit("Downloading AUR metadata...")
+            self._download("https://aur.archlinux.org/packages-meta-ext-v1.json.gz", aur_dest)
+        
+        self.status_message.emit("Ready")
         GLib.idle_add(self._initial_refresh)
 
-    def _download_aur_metadata(self, sync_dir):
-        dest = os.path.join(sync_dir, "packages-meta-ext-v1.json.gz")
-        if not os.path.exists(dest):
-            self.status_message.emit("Downloading AUR metadata...")
-            try:
-                import urllib.request
-                urllib.request.urlretrieve("https://aur.archlinux.org/packages-meta-ext-v1.json.gz", dest)
-            except Exception as e:
-                print(f"AUR Download failed: {e}")
-
-    def _ensure_local_databases(self, db_path):
-        sync_dir = os.path.join(db_path, "sync")
-        arch = "x86_64"
-        self.status_message.emit("Syncing databases...")
-        for repo in ["core", "extra"]:
-            url = f"https://mirrors.kernel.org/archlinux/{repo}/os/{arch}/{repo}.db"
-            dest = os.path.join(sync_dir, f"{repo}.db")
-            if not os.path.exists(dest):
-                try:
-                    import urllib.request
-                    urllib.request.urlretrieve(url, dest)
-                except: pass
-        self._download_aur_metadata(sync_dir)
-        self.status_message.emit("Ready")
+    def _download(self, url, dest):
+        try:
+            import urllib.request
+            urllib.request.urlretrieve(url, dest)
+        except: pass
 
     def _initial_refresh(self):
         self._transaction.check_dbs(None, lambda o, r: None)
+
+    @Slot(str, str, result="QVariantMap")
+    def get_package_details(self, name, repo):
+        try:
+            pkg = None
+            if repo == "AUR":
+                pkg = self._db.get_aur_pkg(name)
+            else:
+                pkg = self._db.get_sync_pkg(name)
+            
+            if not pkg:
+                return {}
+
+            details = {
+                "name": pkg.get_name(),
+                "version": pkg.get_version(),
+                "description": pkg.get_desc() or "",
+                "repository": repo,
+                "url": pkg.get_url() or "",
+                "license": pkg.get_license() or "",
+                "maintainer": pkg.get_packager() or "",
+            }
+
+            if repo == "AUR":
+                details["votes"] = str(pkg.get_votes())
+                details["popularity"] = f"{pkg.get_popularity():.2f}"
+                details["maintainer"] = pkg.get_maintainer() or "None"
+            
+            deps = pkg.get_depends()
+            details["depends"] = [deps.get(i) for i in range(deps.length)] if deps else []
+            return details
+        except Exception as e:
+            print(f"Failed to get details: {e}")
+            return {}
 
     @Slot(str)
     def search_packages_async(self, query):
