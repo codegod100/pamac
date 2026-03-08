@@ -30,9 +30,16 @@ Kirigami.ApplicationWindow {
 
         header: Kirigami.SearchField {
             id: searchField
+            focus: true
             placeholderText: qsTr("Search for packages...")
             onTextChanged: searchDelay.restart()
-            Component.onCompleted: forceActiveFocus()
+        }
+
+        Timer {
+            interval: 200
+            running: true
+            repeat: false
+            onTriggered: searchField.forceActiveFocus()
         }
 
         // Debounce search to keep UI snappy
