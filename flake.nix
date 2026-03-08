@@ -143,7 +143,7 @@
         packages.libpamac = libpamac;
         packages.pamac = pamac;
         packages.pyside-pamac = pyside-pamac;
-        packages.default = pamac;
+        packages.default = pyside-pamac;
 
         devShells.default = pkgs.mkShell {
           inputsFrom = [ pamac ];
