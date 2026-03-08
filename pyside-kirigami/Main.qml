@@ -9,6 +9,10 @@ Kirigami.ApplicationWindow {
     width: 800
     height: 600
 
+    // Set a larger default font size and clean font family
+    font.pointSize: 12
+    font.family: "sans-serif"
+
     property bool isSearching: false
 
     Component {
@@ -24,6 +28,7 @@ Kirigami.ApplicationWindow {
                     text: pkg ? pkg.version : ""
                     level: 2
                     Layout.fillWidth: true
+                    font.pointSize: 16
                 }
 
                 Kirigami.FormLayout {
@@ -34,10 +39,12 @@ Kirigami.ApplicationWindow {
                         text: pkg ? (pkg.description || "") : ""
                         wrapMode: Text.WordWrap
                         Layout.fillWidth: true
+                        font.pointSize: 13
                     }
                     Label {
                         Kirigami.FormData.label: qsTr("Repository:")
                         text: pkg ? (pkg.repository || "") : ""
+                        font.pointSize: 12
                     }
                     Label {
                         Kirigami.FormData.label: qsTr("URL:")
@@ -45,6 +52,7 @@ Kirigami.ApplicationWindow {
                         color: Kirigami.Theme.highlightColor
                         elide: Text.ElideRight
                         Layout.fillWidth: true
+                        font.pointSize: 12
                         
                         MouseArea {
                             anchors.fill: parent
@@ -55,20 +63,24 @@ Kirigami.ApplicationWindow {
                     Label {
                         Kirigami.FormData.label: qsTr("License:")
                         text: pkg ? (pkg.license || "") : ""
+                        font.pointSize: 12
                     }
                     Label {
                         Kirigami.FormData.label: qsTr("Maintainer:")
                         text: pkg ? (pkg.maintainer || "") : ""
+                        font.pointSize: 12
                     }
                     Label {
                         visible: pkg && pkg.repository === "AUR"
                         Kirigami.FormData.label: qsTr("Votes:")
                         text: pkg ? (pkg.votes || "0") : ""
+                        font.pointSize: 12
                     }
                     Label {
                         visible: pkg && pkg.repository === "AUR"
                         Kirigami.FormData.label: qsTr("Popularity:")
                         text: pkg ? (pkg.popularity || "0.00") : ""
+                        font.pointSize: 12
                     }
                 }
 
@@ -76,6 +88,7 @@ Kirigami.ApplicationWindow {
                     text: qsTr("Dependencies")
                     level: 4
                     visible: pkg && pkg.depends && pkg.depends.length > 0
+                    font.pointSize: 14
                 }
 
                 Flow {
@@ -87,6 +100,7 @@ Kirigami.ApplicationWindow {
                         delegate: Label {
                             text: modelData
                             padding: Kirigami.Units.smallSpacing
+                            font.pointSize: 11
                             background: Rectangle {
                                 color: Kirigami.Theme.highlightColor
                                 opacity: 0.2
@@ -110,6 +124,7 @@ Kirigami.ApplicationWindow {
                 horizontalAlignment: Text.AlignHCenter
                 verticalAlignment: Text.AlignVCenter
                 elide: Text.ElideRight
+                font.pointSize: 10
             }
             Connections {
                 target: pamacBackend
@@ -123,6 +138,7 @@ Kirigami.ApplicationWindow {
             id: searchField
             focus: true
             placeholderText: qsTr("Search for packages...")
+            font.pointSize: 14
             onTextChanged: {
                 if (text.length > 2) {
                     searchDelay.restart()
@@ -196,10 +212,12 @@ Kirigami.ApplicationWindow {
                         text: model.name || ""
                         level: 2
                         Layout.fillWidth: true
+                        font.pointSize: 15
                     }
                     Label {
                         text: (model.version || "") + " (" + (model.repository || "") + ")"
                         font.italic: true
+                        font.pointSize: 11
                         color: Kirigami.Theme.disabledTextColor
                         Layout.fillWidth: true
                     }
@@ -208,6 +226,7 @@ Kirigami.ApplicationWindow {
                         wrapMode: Text.WordWrap
                         Layout.fillWidth: true
                         visible: text !== ""
+                        font.pointSize: 12
                     }
                 }
                 onClicked: {
