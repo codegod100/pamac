@@ -57,7 +57,7 @@ Kirigami.ApplicationWindow {
                         MouseArea {
                             anchors.fill: parent
                             cursorShape: Qt.PointingHandCursor
-                            onClicked: if (pkg && pkg.url) Qt.openUrlExternally(pkg.url)
+                            onClicked: if (pkg && pkg.url) pamacBackend.open_url(pkg.url)
                         }
                     }
                     Label {

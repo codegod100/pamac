@@ -141,6 +141,18 @@ class PamacBackend(QObject):
             return {}
 
     @Slot(str)
+    def open_url(self, url):
+        if not url:
+            return
+        print(f"Opening URL in new window: {url}")
+        try:
+            import webbrowser
+            # open_new attempts to open the URL in a new window of the default browser
+            webbrowser.open_new(url)
+        except Exception as e:
+            print(f"Failed to open URL: {e}")
+
+    @Slot(str)
     def search_packages_async(self, query):
         self.search_started.emit()
         threading.Thread(target=self._perform_search, args=(query,), daemon=True).start()
