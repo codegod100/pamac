@@ -54,8 +54,11 @@
             # Additional check: make sure AlpmConfig constructor in src/pamac_config.vala is also patched
             sed -i 's|new AlpmConfig ("/etc/pacman.conf")|new AlpmConfig (GLib.Environment.get_variable("PACMAN_CONF") ?? "/etc/pacman.conf")|g' src/pamac_config.vala
             
-            # Force add repos at the end of AlpmConfig constructor
-            sed -i '/reload ();/a \ \ \ \ \ \ \ \ \ \ \ \ if (repo_order.length == 0) {\n\ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ var core = new AlpmRepo ("core");\n\ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ core.urls.add ("https://mirrors.kernel.org/archlinux/$repo/os/$arch");\n\ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ repo_order.add ((owned) core);\n\ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ var extra = new AlpmRepo ("extra");\n\ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ extra.urls.add ("https://mirrors.kernel.org/archlinux/$repo/os/$arch");\n\ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ repo_order.add ((owned) extra);\n\ \ \ \ \ \ \ \ \ \ \ \ }' src/alpm_config.vala
+            # Force add repos if repo_order is empty after reload
+            sed -i '/reload ();/a \ \ \ \ \ \ \ \ \ \ \ \ if (this.repo_order.length == 0) {\n\ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ var core = new AlpmRepo ("core");\n\ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ core.urls.add ("https://mirrors.kernel.org/archlinux/$repo/os/$arch");\n\ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ this.repo_order.add ((owned) core);\n\ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ var extra = new AlpmRepo ("extra");\n\ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ extra.urls.add ("https://mirrors.kernel.org/archlinux/$repo/os/$arch");\n\ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ this.repo_order.add ((owned) extra);\n\ \ \ \ \ \ \ \ \ \ \ \ }' src/alpm_config.vala
+            
+            # Disable siglevel for these forced repos
+            sed -i '/this.repo_order.add ((owned) extra);/a \ \ \ \ \ \ \ \ \ \ \ \ foreach (unowned AlpmRepo repo in this.repo_order) { repo.siglevel = Alpm.SigLevel.USE_DEFAULT; }' src/alpm_config.vala
             # Ensure parse_file also uses the potentially overridden conf_path
             sed -i 's|parse_file (conf_path)|parse_file (this.conf_path)|g' src/alpm_config.vala
             
