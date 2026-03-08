@@ -4,6 +4,7 @@ import gi
 import threading
 import platform
 import signal
+import subprocess
 
 # Ensure GObject Introspection can find Pamac
 gi.require_version('Pamac', '11')
@@ -112,22 +113,15 @@ class PamacBackend(QObject):
             else:
                 details["maintainer"] = pkg.props.packager or ""
             
-            # Final attempt at bulletproof dependency processing
             details["depends"] = []
             deps = pkg.props.depends
             if deps is not None:
                 try:
-                    # Try list-like or iterable
                     for d in deps:
                         details["depends"].append(str(d))
                 except:
                     try:
-                        # Try index-based access
-                        length = 0
-                        if hasattr(deps, "length"): length = deps.length
-                        elif hasattr(deps, "len"): length = deps.len
-                        else: length = len(deps)
-                        
+                        length = getattr(deps, "length", getattr(deps, "len", 0))
                         for i in range(length):
                             try:
                                 d = deps.get(i) if hasattr(deps, "get") else deps[i]
@@ -142,15 +136,31 @@ class PamacBackend(QObject):
 
     @Slot(str)
     def open_url(self, url):
-        if not url:
-            return
-        print(f"Opening URL in new window: {url}")
-        try:
-            import webbrowser
-            # open_new attempts to open the URL in a new window of the default browser
-            webbrowser.open_new(url)
-        except Exception as e:
-            print(f"Failed to open URL: {e}")
+        if not url: return
+        print(f"Force opening URL in new window: {url}")
+        
+        # Try specific browser commands for new window
+        opened = False
+        for cmd in [
+            ["firefox", "--new-window"],
+            ["google-chrome", "--new-window"],
+            ["chromium", "--new-window"],
+            ["brave", "--new-window"]
+        ]:
+            try:
+                subprocess.Popen(cmd + [url], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                opened = True
+                break
+            except FileNotFoundError:
+                continue
+        
+        if not opened:
+            # Fallback to standard webbrowser
+            try:
+                import webbrowser
+                webbrowser.open_new(url)
+            except:
+                subprocess.Popen(["xdg-open", url])
 
     @Slot(str)
     def search_packages_async(self, query):
