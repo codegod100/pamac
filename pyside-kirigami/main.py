@@ -31,18 +31,28 @@ class PamacBackend(QObject):
         if not query:
             return []
         
-        # search_pkgs returns a GenericArray of AlpmPackage
-        pkgs = self._db.search_pkgs(query)
         results = []
         
-        # In Python with PyGObject, GenericArray should be iterable
+        # Repo packages
+        pkgs = self._db.search_pkgs(query)
         for pkg in pkgs:
             results.append({
                 "name": pkg.get_name(),
                 "version": pkg.get_version(),
                 "description": pkg.get_desc() if pkg.get_desc() else "",
-                "repository": pkg.get_repo() if pkg.get_repo() else ""
+                "repository": pkg.get_repo() if pkg.get_repo() else "Repo"
             })
+            
+        # AUR packages
+        aur_pkgs = self._db.search_aur_pkgs(query)
+        for pkg in aur_pkgs:
+            results.append({
+                "name": pkg.get_name(),
+                "version": pkg.get_version(),
+                "description": pkg.get_desc() if pkg.get_desc() else "",
+                "repository": "AUR"
+            })
+            
         return results
 
 if __name__ == "__main__":

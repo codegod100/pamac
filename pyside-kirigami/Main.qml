@@ -55,7 +55,7 @@ Kirigami.ApplicationWindow {
                                 level: 2
                             }
                             Label {
-                                text: model.version
+                                text: model.version + " (" + model.repository + ")"
                                 font.italic: true
                             }
                             Label {

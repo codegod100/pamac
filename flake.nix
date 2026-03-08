@@ -46,6 +46,9 @@
             sed -i "s/version : '>=16.0'/version : '>=15.0'/" src/meson.build
             sed -i "s/handle.disable_sandbox_filesystem = /handle.disable_sandbox = /" src/alpm_config.vala
             sed -i "/handle.disable_sandbox_syscalls = /d" src/alpm_config.vala
+            
+            # Enable AUR by default in the installed config
+            sed -i "s/#EnableAUR/EnableAUR/" data/config/pamac.conf
           '';
 
           buildInputs = with pkgs; [
