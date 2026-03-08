@@ -65,10 +65,8 @@
             sed -i 's|"/var/lib/pacman/"|GLib.Environment.get_variable("PACMAN_DBPATH") ?? "/var/lib/pacman/"|g' src/alpm_config.vala
             sed -i 's|"/var/log/pacman.log"|GLib.Environment.get_variable("PACMAN_LOGFILE") ?? "/var/log/pacman.log"|g' src/alpm_config.vala
             
-            # Ensure register_syncdbs uses the same expanded path logic if needed
-            # but usually it uses handle.dbpath which is already set.
-            # Let's make sure architectures are also handled if not set.
-            sed -i 's|architectures\[0\]|architectures.length > 0 ? architectures[0] : "x86_64"|g' src/alpm_config.vala
+            # Ensure architectures are set from config or default
+            sed -i 's|if (key == "Architecture") {|if (key == "Architecture") {\n\ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ if (val == "auto") val = "x86_64";|g' src/alpm_config.vala
             
             # Enable AUR by default in the installed config
             sed -i "s/#EnableAUR/EnableAUR/" data/config/pamac.conf
