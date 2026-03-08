@@ -44,15 +44,15 @@
       "locked": {
         "lastModified": 1772999105,
         "narHash": "sha256-dnNob4mqgWSFLmH9TAJPJk9GuNLff9ow/hglTSmRVSI=",
-        "ref": "refs/heads/main",
+        "owner": "codegod100",
+        "repo": "libpamac-nix",
         "rev": "854211e70d811e61616cb52667f815362c7e44b3",
-        "revCount": 2,
-        "type": "git",
-        "url": "file:///home/nandi/code/libpamac-src"
+        "type": "github"
       },
       "original": {
-        "type": "git",
-        "url": "file:///home/nandi/code/libpamac-src"
+        "owner": "codegod100",
+        "repo": "libpamac-nix",
+        "type": "github"
       }
     },
     "nixpkgs": {
