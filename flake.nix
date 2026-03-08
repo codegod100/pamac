@@ -54,14 +54,12 @@
             # Additional check: make sure AlpmConfig constructor in src/pamac_config.vala is also patched
             sed -i 's|new AlpmConfig ("/etc/pacman.conf")|new AlpmConfig (GLib.Environment.get_variable("PACMAN_CONF") ?? "/etc/pacman.conf")|g' src/pamac_config.vala
             
-            # Patch AlpmConfig.vala to use env var for EVERYTHING
-            sed -i 's|parse_file (conf_path)|parse_file (GLib.Environment.get_variable("PACMAN_CONF") ?? "/etc/pacman.conf")|g' src/alpm_config.vala
-            sed -i 's|AlpmConfig (string path)|AlpmConfig (string _unused_path)|g' src/alpm_config.vala
-            sed -i 's|conf_path = path;|conf_path = GLib.Environment.get_variable("PACMAN_CONF") ?? "/etc/pacman.conf";|g' src/alpm_config.vala
-            sed -i 's|siglevel = Alpm.SigLevel.PACKAGE_OPTIONAL |siglevel = Alpm.SigLevel.USE_DEFAULT |g' src/alpm_config.vala
-            sed -i '/parse_file (conf_path);/a \ \ \ \ \ \ \ \ \ \ \ \ siglevel = Alpm.SigLevel.USE_DEFAULT;\n\ \ \ \ \ \ \ \ \ \ \ \ if (repo_order.length == 0) {\n\ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ var core = new AlpmRepo ("core");\n\ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ core.urls.add ("https://mirrors.kernel.org/archlinux/$repo/os/$arch");\n\ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ repo_order.add ((owned) core);\n\ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ var extra = new AlpmRepo ("extra");\n\ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ extra.urls.add ("https://mirrors.kernel.org/archlinux/$repo/os/$arch");\n\ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ repo_order.add ((owned) extra);\n\ \ \ \ \ \ \ \ \ \ \ \ }' src/alpm_config.vala
-
-            # Patch AlpmConfig defaults
+            # Patch AlpmConfig constructor to favor PACMAN_CONF environment variable
+            sed -i 's|conf_path = path;|conf_path = GLib.Environment.get_variable("PACMAN_CONF") ?? path;|g' src/alpm_config.vala
+            # Ensure parse_file also uses the potentially overridden conf_path
+            sed -i 's|parse_file (conf_path)|parse_file (this.conf_path)|g' src/alpm_config.vala
+            
+            # Patch AlpmConfig defaults for DBPath and LogFile
             sed -i 's|"/var/lib/pacman/"|GLib.Environment.get_variable("PACMAN_DBPATH") ?? "/var/lib/pacman/"|g' src/alpm_config.vala
             sed -i 's|"/var/log/pacman.log"|GLib.Environment.get_variable("PACMAN_LOGFILE") ?? "/var/log/pacman.log"|g' src/alpm_config.vala
             
