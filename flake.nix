@@ -88,6 +88,7 @@
               --set PAMAC_CONF "/etc/pamac.conf" \
               --set PACMAN_CONF "/etc/pacman.conf" \
               --set PACMAN_DBPATH "/var/lib/pacman/" \
+              --set G_MESSAGES_DEBUG "" \
               --set LIBGL_ALWAYS_SOFTWARE "1" \
               --set QT_QUICK_BACKEND "software" \
               --prefix PYTHONPATH : "$PYTHONPATH:${pkgs.python3Packages.pyside6}/${pkgs.python3.sitePackages}:${pkgs.python3Packages.pygobject3}/${pkgs.python3.sitePackages}" \

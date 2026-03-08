@@ -17,7 +17,7 @@ Kirigami.ApplicationWindow {
 
     Component {
         id: detailsPage
-        Kirigami.ScrollablePage {
+        Kirigami.Page {
             property var pkg: null
             title: pkg ? pkg.name : ""
 
