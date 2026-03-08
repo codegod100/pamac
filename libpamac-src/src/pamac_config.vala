@@ -167,7 +167,9 @@ namespace Pamac {
 			Object(conf_path: conf_path);
 		}
 
-		construct {
+		public string fuck_it { get { return "I AM THE NEW LIBPAMAC"; } }
+
+	construct {
 			//get environment variables
 			environment_variables_priv = new HashTable<string, string> (str_hash, str_equal);
 			alpm_config = new AlpmConfig (GLib.Environment.get_variable("PACMAN_CONF") ?? "/etc/pacman.conf");
