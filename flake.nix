@@ -58,8 +58,8 @@
           '';
         };
 
-        pyside-pamac = pkgs.stdenv.mkDerivation {
-          pname = "pyside-pamac";
+        pamac-pyside = pkgs.stdenv.mkDerivation {
+          pname = "pamac-pyside";
           version = "0.1.0";
           src = ./pyside-kirigami;
 
@@ -78,29 +78,28 @@
           ];
 
           installPhase = ''
-            mkdir -p $out/bin $out/share/pyside-pamac
-            cp main.py Main.qml $out/share/pyside-pamac/
-            
-            makeWrapper ${pkgs.python3}/bin/python3 $out/bin/pyside-pamac \
-              --add-flags "$out/share/pyside-pamac/main.py" \
+            mkdir -p $out/bin $out/share/pamac-pyside
+            cp main.py Main.qml $out/share/pamac-pyside/
+
+            makeWrapper ${pkgs.python3}/bin/python3 $out/bin/pamac-pyside \
+              --add-flags "$out/share/pamac-pyside/main.py" \
               --set GI_TYPELIB_PATH "${libpamac}/lib/girepository-1.0:${pkgs.glib.out}/lib/girepository-1.0:${pkgs.gobject-introspection.out}/lib/girepository-1.0" \
               --set LD_LIBRARY_PATH "${libpamac}/lib" \
               --set PAMAC_CONF "/etc/pamac.conf" \
               --set PACMAN_CONF "/etc/pacman.conf" \
               --set PACMAN_DBPATH "/var/lib/pacman/" \
-              --set G_MESSAGES_DEBUG "" \
               --set LIBGL_ALWAYS_SOFTWARE "1" \
               --set QT_QUICK_BACKEND "software" \
               --prefix PYTHONPATH : "$PYTHONPATH:${pkgs.python3Packages.pyside6}/${pkgs.python3.sitePackages}:${pkgs.python3Packages.pygobject3}/${pkgs.python3.sitePackages}" \
               --prefix QML2_IMPORT_PATH : "${pkgs.kdePackages.kirigami}/lib/qt-6/qml"
           '';
         };
-      in
-      {
+        in
+        {
         packages.libpamac = libpamac;
         packages.pamac = pamac;
-        packages.pyside-pamac = pyside-pamac;
-        packages.default = pyside-pamac;
+        packages.pamac-pyside = pamac-pyside;
+        packages.default = pamac-pyside;
 
         devShells.default = pkgs.mkShell {
           inputsFrom = [ pamac ];

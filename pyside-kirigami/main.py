@@ -6,6 +6,7 @@ import platform
 import signal
 import subprocess
 import queue
+import json
 
 # Ensure GObject Introspection can find Pamac
 gi.require_version('Pamac', '11')
@@ -17,15 +18,21 @@ from PySide6.QtCore import QObject, Slot, Signal, QTimer
 
 class PamacBackend(QObject):
     search_results_ready = Signal(list, int)
-    search_started = Signal(int) # Now carries the seq
+    search_started = Signal(int)
     status_message = Signal(str)
 
     def __init__(self):
         super().__init__()
         self._search_seq = 0
         self._search_cache = {}
+        self._search_queue = queue.Queue()
         self._lock = threading.Lock()
-        
+
+        self.cache_dir = os.path.expanduser("~/.cache/pamac-pyside")
+        self.cache_file = os.path.join(self.cache_dir, "search_cache.json")
+        os.makedirs(self.cache_dir, exist_ok=True)
+        self._load_cache()
+
         user_config_dir = os.path.expanduser("~/.config/pamac")
         self.user_db_path = os.path.expanduser("~/.local/share/pamac")
         self.sync_dir = os.path.join(self.user_db_path, "sync")
@@ -54,6 +61,22 @@ class PamacBackend(QObject):
         self._transaction = Pamac.Transaction(database=self._db)
         
         threading.Thread(target=self._bg_maintenance, daemon=True).start()
+
+    def _load_cache(self):
+        try:
+            if os.path.exists(self.cache_file):
+                with open(self.cache_file, 'r') as f:
+                    self._search_cache = json.load(f)
+                print(f"Loaded {len(self._search_cache)} queries from cache.")
+        except Exception as e:
+            print(f"Failed to load cache: {e}")
+
+    def _save_cache(self):
+        try:
+            with open(self.cache_file, 'w') as f:
+                json.dump(self._search_cache, f)
+        except Exception as e:
+            print(f"Failed to save cache: {e}")
 
     def _bg_maintenance(self):
         system_sync = "/var/lib/pacman/sync"
@@ -115,6 +138,13 @@ class PamacBackend(QObject):
             return {}
 
     @Slot(str)
+    def copy_to_clipboard(self, text):
+        if not text: return
+        print(f"Copying to clipboard: {text}")
+        clipboard = QGuiApplication.clipboard()
+        clipboard.setText(text)
+
+    @Slot(str)
     def open_url(self, url):
         if not url: return
         for cmd in [["firefox", "--new-window"], ["google-chrome", "--new-window"], ["chromium", "--new-window"]]:
@@ -172,6 +202,7 @@ class PamacBackend(QObject):
                 })
             
             self._search_cache[query] = results
+            self._save_cache()
         except Exception as e:
             print(f"Search error: {e}")
         
