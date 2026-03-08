@@ -14,6 +14,7 @@ Kirigami.ApplicationWindow {
     font.family: "sans-serif"
 
     property bool isSearching: false
+    property string lastSearchText: ""
 
     Component {
         id: detailsPage
@@ -122,6 +123,7 @@ Kirigami.ApplicationWindow {
         title: qsTr("Software Management")
 
         footer: ToolBar {
+            z: 10
             contentItem: Label {
                 id: statusLabel
                 text: qsTr("Ready")
@@ -144,17 +146,21 @@ Kirigami.ApplicationWindow {
             placeholderText: qsTr("Search for packages...")
             font.pointSize: 16
             onTextChanged: {
+                if (text === root.lastSearchText) return;
                 if (text.length > 2) {
                     searchDelay.restart()
                 } else {
                     root.isSearching = false
                     packageModel.clear()
+                    root.lastSearchText = ""
                 }
             }
             onAccepted: {
+                if (text === root.lastSearchText) return;
                 if (text.length > 2) {
                     root.isSearching = true
                     searchDelay.stop()
+                    root.lastSearchText = text
                     pamacBackend.search_packages_async(text)
                 }
             }
@@ -173,6 +179,7 @@ Kirigami.ApplicationWindow {
             repeat: false
             onTriggered: {
                 root.isSearching = true
+                root.lastSearchText = searchField.text
                 pamacBackend.search_packages_async(searchField.text)
             }
         }
