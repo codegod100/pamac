@@ -16,21 +16,25 @@ Kirigami.ApplicationWindow {
     property string lastSearchText: ""
     property int currentSearchSeq: 0
 
-    // Centralized connections
     Connections {
         target: pamacBackend
         function onSearch_results_ready(results, seq) {
             console.log("DEBUG: QML received " + results.length + " results for seq " + seq + " (current: " + root.currentSearchSeq + ")")
+            
+            // ALWAYS turn off searching when results for our latest request arrive
             if (seq >= root.currentSearchSeq) {
+                root.isSearching = false
+                root.currentSearchSeq = seq
+                
                 packageModel.clear()
                 for (var i = 0; i < results.length; i++) {
                     packageModel.append(results[i])
                 }
-                root.isSearching = false
-                root.currentSearchSeq = seq
             }
         }
-        function onSearch_started() {
+        function onSearch_started(seq) {
+            console.log("DEBUG: QML Search started for seq " + seq)
+            root.currentSearchSeq = seq
             root.isSearching = true
         }
         function onStatus_message(msg) {
@@ -169,16 +173,13 @@ Kirigami.ApplicationWindow {
                     root.isSearching = false
                     packageModel.clear()
                     root.lastSearchText = ""
-                    root.currentSearchSeq++
                 }
             }
             onAccepted: {
                 if (text === root.lastSearchText) return;
                 if (text.length > 2) {
-                    root.isSearching = true
                     searchDelay.stop()
                     root.lastSearchText = text
-                    root.currentSearchSeq++
                     pamacBackend.search_packages_async(text)
                 }
             }
@@ -196,9 +197,7 @@ Kirigami.ApplicationWindow {
             interval: 600
             repeat: false
             onTriggered: {
-                root.isSearching = true
                 root.lastSearchText = searchField.text
-                root.currentSearchSeq++
                 pamacBackend.search_packages_async(searchField.text)
             }
         }

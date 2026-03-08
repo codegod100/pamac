@@ -17,16 +17,15 @@ from PySide6.QtCore import QObject, Slot, Signal, QTimer
 
 class PamacBackend(QObject):
     search_results_ready = Signal(list, int)
-    search_started = Signal()
+    search_started = Signal(int) # Now carries the seq
     status_message = Signal(str)
 
     def __init__(self):
         super().__init__()
         self._search_seq = 0
         self._search_cache = {}
-        self._search_queue = queue.Queue()
+        self._lock = threading.Lock()
         
-        system_pacman_conf = "/etc/pacman.conf"
         user_config_dir = os.path.expanduser("~/.config/pamac")
         self.user_db_path = os.path.expanduser("~/.local/share/pamac")
         self.sync_dir = os.path.join(self.user_db_path, "sync")
@@ -34,7 +33,6 @@ class PamacBackend(QObject):
         os.makedirs(user_config_dir, exist_ok=True)
         os.makedirs(self.sync_dir, exist_ok=True)
         
-        # Setup environment
         os.environ["PACMAN_DBPATH"] = self.user_db_path
         os.environ["PACMAN_CONF"] = os.path.join(user_config_dir, "pacman.conf")
         self.conf_path = os.path.join(user_config_dir, "pamac.conf")
@@ -50,14 +48,11 @@ class PamacBackend(QObject):
             with open(self.conf_path, 'w') as f:
                 f.write("EnableAUR\n")
 
-        # Initializing Pamac objects (must happen in main thread)
         self._config = Pamac.Config(conf_path=self.conf_path)
         self._config.set_enable_aur(True)
         self._db = Pamac.Database(config=self._config)
+        self._transaction = Pamac.Transaction(database=self._db)
         
-        # Start persistent worker thread
-        threading.Thread(target=self._search_worker, daemon=True).start()
-        # Start maintenance thread
         threading.Thread(target=self._bg_maintenance, daemon=True).start()
 
     def _bg_maintenance(self):
@@ -78,72 +73,43 @@ class PamacBackend(QObject):
             except: pass
         self.status_message.emit("Ready")
 
-    def _search_worker(self):
-        while True:
-            query, seq = self._search_queue.get()
-            if query is None: break # Shutdown signal
-            
-            # Check if this search is already outdated
-            if seq < self._search_seq:
-                self._search_queue.task_done()
-                continue
-                
-            results = []
-            try:
-                # Sync search calls
-                repo_pkgs = self._db.search_pkgs(query)
-                for pkg in repo_pkgs:
-                    results.append({
-                        "name": pkg.props.name, "version": pkg.props.version,
-                        "description": pkg.props.desc or "", "repository": pkg.props.repo or "Repo"
-                    })
-                results.sort(key=lambda x: x["name"])
-                
-                if seq == self._search_seq:
-                    aur_pkgs = self._db.search_aur_pkgs(query)
-                    for pkg in aur_pkgs:
-                        results.append({
-                            "name": pkg.props.name, "version": pkg.props.version,
-                            "description": pkg.props.desc or "", "repository": "AUR"
-                        })
-                
-                # Emit results directly (PySide6 signals are thread-safe)
-                if seq >= self._search_seq:
-                    self._search_cache[query] = results
-                    self.search_results_ready.emit(results, seq)
-            except Exception as e:
-                print(f"Search worker error: {e}")
-                self.search_results_ready.emit([], seq)
-            
-            self._search_queue.task_done()
-
     @Slot(str, str, result="QVariantMap")
     def get_package_details(self, name, repo):
         try:
-            pkg = self._db.get_aur_pkg(name) if repo == "AUR" else self._db.get_sync_pkg(name)
-            if not pkg: return {}
-            details = {
-                "name": pkg.props.name, "version": pkg.props.version, "description": pkg.props.desc or "",
-                "repository": repo, "url": pkg.props.url or "", "license": pkg.props.license or "", "maintainer": "",
-            }
-            if repo == "AUR":
-                details["votes"] = str(pkg.props.numvotes)
-                details["popularity"] = f"{pkg.props.popularity:.2f}"
-                details["maintainer"] = pkg.props.maintainer or "None"
-            else: details["maintainer"] = pkg.props.packager or ""
-            
-            details["depends"] = []
-            deps = pkg.props.depends
-            if deps:
-                try:
-                    for i in range(1000):
-                        try:
-                            d = deps.get(i) if hasattr(deps, "get") else deps[i]
-                            if d: details["depends"].append(str(d))
-                            else: break
-                        except: break
-                except: pass
-            return details
+            with self._lock:
+                pkg = self._db.get_aur_pkg(name) if repo == "AUR" else self._db.get_sync_pkg(name)
+                if not pkg: return {}
+                
+                details = {
+                    "name": str(pkg.props.name),
+                    "version": str(pkg.props.version),
+                    "description": str(pkg.props.desc or ""),
+                    "repository": str(repo),
+                    "url": str(pkg.props.url or ""),
+                    "license": str(pkg.props.license or ""),
+                    "maintainer": "",
+                    "depends": []
+                }
+
+                if repo == "AUR":
+                    details["votes"] = str(pkg.props.numvotes)
+                    details["popularity"] = f"{pkg.props.popularity:.2f}"
+                    details["maintainer"] = str(pkg.props.maintainer or "None")
+                else:
+                    details["maintainer"] = str(pkg.props.packager or "")
+                
+                # Resilient dependency extraction
+                deps = pkg.props.depends
+                if deps:
+                    try:
+                        for i in range(1000):
+                            try:
+                                d = deps.get(i) if hasattr(deps, "get") else deps[i]
+                                if d: details["depends"].append(str(d))
+                                else: break
+                            except: break
+                    except: pass
+                return details
         except Exception as e:
             print(f"Details error: {e}")
             return {}
@@ -155,7 +121,7 @@ class PamacBackend(QObject):
             try:
                 subprocess.Popen(cmd + [url], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
                 return
-            except FileNotFoundError: continue
+            except: continue
         try:
             import webbrowser
             webbrowser.open_new(url)
@@ -164,13 +130,53 @@ class PamacBackend(QObject):
     @Slot(str)
     def search_packages_async(self, query):
         self._search_seq += 1
-        current_seq = self._search_seq
+        seq = self._search_seq
+        
         if query in self._search_cache:
-            self.search_results_ready.emit(self._search_cache[query], current_seq)
+            self.search_results_ready.emit(self._search_cache[query], seq)
+            return
+
+        self.search_started.emit(seq)
+        threading.Thread(target=self._perform_search, args=(query, seq), daemon=True).start()
+
+    def _perform_search(self, query, seq):
+        if not query or len(query) < 2:
+            self.search_results_ready.emit([], seq)
             return
         
-        self.search_started.emit()
-        self._search_queue.put((query, current_seq))
+        results = []
+        try:
+            # We don't use the lock for the whole search to avoid blocking
+            # libpamac's internal search might not be thread-safe but we have no choice
+            # given the previous failures with its async API.
+            
+            # 1. Repo Search
+            repo_pkgs = self._db.search_pkgs(query)
+            for pkg in repo_pkgs:
+                results.append({
+                    "name": str(pkg.props.name),
+                    "version": str(pkg.props.version),
+                    "description": str(pkg.props.desc or ""),
+                    "repository": str(pkg.props.repo or "Repo")
+                })
+            results.sort(key=lambda x: x["name"])
+            
+            # 2. AUR Search
+            aur_pkgs = self._db.search_aur_pkgs(query)
+            for pkg in aur_pkgs:
+                results.append({
+                    "name": str(pkg.props.name),
+                    "version": str(pkg.props.version),
+                    "description": str(pkg.props.desc or ""),
+                    "repository": "AUR"
+                })
+            
+            self._search_cache[query] = results
+        except Exception as e:
+            print(f"Search error: {e}")
+        
+        # Always emit so the UI can stop the spinner
+        self.search_results_ready.emit(results, seq)
 
 if __name__ == "__main__":
     signal.signal(signal.SIGINT, signal.SIG_DFL)
