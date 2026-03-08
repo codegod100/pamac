@@ -113,8 +113,10 @@ Kirigami.ApplicationWindow {
         id: detailsSheet
         title: selectedPackage ? selectedPackage.name : ""
         
+        // Fix binding loop by using a fixed or maximum width instead of relying on root.width
+        width: Math.min(root.width * 0.9, Kirigami.Units.gridUnit * 30)
+        
         ColumnLayout {
-            width: root.width * 0.8
             spacing: Kirigami.Units.largeSpacing
 
             Kirigami.Heading {
@@ -139,7 +141,8 @@ Kirigami.ApplicationWindow {
                 Label {
                     Kirigami.FormData.label: qsTr("URL:")
                     text: selectedPackage ? selectedPackage.url : ""
-                    color: Kirigami.Theme.linkByMouseColor
+                    // Avoid linkByMouseColor which might be undefined
+                    color: Kirigami.Theme.highlightColor
                     elide: Text.ElideRight
                     Layout.fillWidth: true
                 }
@@ -179,6 +182,7 @@ Kirigami.ApplicationWindow {
                         text: modelData
                         padding: Kirigami.Units.smallSpacing
                         background: Rectangle {
+                            // Safely use highlightColor
                             color: Kirigami.Theme.highlightColor
                             opacity: 0.2
                             radius: Kirigami.Units.smallSpacing
