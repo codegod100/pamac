@@ -19,13 +19,9 @@ Kirigami.ApplicationWindow {
     Connections {
         target: pamacBackend
         function onSearch_results_ready(results, seq) {
-            console.log("DEBUG: QML received " + results.length + " results for seq " + seq + " (current: " + root.currentSearchSeq + ")")
-            
-            // ALWAYS turn off searching when results for our latest request arrive
             if (seq >= root.currentSearchSeq) {
                 root.isSearching = false
                 root.currentSearchSeq = seq
-                
                 packageModel.clear()
                 for (var i = 0; i < results.length; i++) {
                     packageModel.append(results[i])
@@ -33,12 +29,8 @@ Kirigami.ApplicationWindow {
             }
         }
         function onSearch_started(seq) {
-            console.log("DEBUG: QML Search started for seq " + seq)
             root.currentSearchSeq = seq
             root.isSearching = true
-        }
-        function onStatus_message(msg) {
-            statusLabel.text = msg
         }
     }
 
@@ -53,11 +45,37 @@ Kirigami.ApplicationWindow {
                 anchors.fill: parent
                 anchors.margins: Kirigami.Units.largeSpacing
 
+                // Selectable package name with copy button
+                Row {
+                    width: parent.width
+                    spacing: Kirigami.Units.smallSpacing
+
+                    TextField {
+                        text: pkg ? pkg.name : ""
+                        readOnly: true
+                        width: parent.width - copyBtn.width - parent.spacing
+                        font.pointSize: 22
+                        font.bold: true
+                        background: null
+                        selectByMouse: true
+                        padding: 0
+                        color: Kirigami.Theme.textColor
+                    }
+
+                    Button {
+                        id: copyBtn
+                        text: qsTr("Copy")
+                        icon.name: "edit-copy"
+                        onClicked: pamacBackend.copy_to_clipboard(pkg ? pkg.name : "")
+                    }
+                }
+
                 Kirigami.Heading {
                     text: pkg ? pkg.version : ""
-                    level: 2
+                    level: 3
                     Layout.fillWidth: true
-                    font.pointSize: 18
+                    font.pointSize: 16
+                    color: Kirigami.Theme.disabledTextColor
                 }
 
                 Kirigami.FormLayout {
@@ -148,18 +166,6 @@ Kirigami.ApplicationWindow {
         id: mainPage
         title: qsTr("Software Management")
 
-        footer: ToolBar {
-            z: 10
-            contentItem: Label {
-                id: statusLabel
-                text: qsTr("Ready")
-                horizontalAlignment: Text.AlignHCenter
-                verticalAlignment: Text.AlignVCenter
-                elide: Text.ElideRight
-                font.pointSize: 12
-            }
-        }
-
         header: Kirigami.SearchField {
             id: searchField
             focus: true
@@ -178,6 +184,7 @@ Kirigami.ApplicationWindow {
             onAccepted: {
                 if (text === root.lastSearchText) return;
                 if (text.length > 2) {
+                    root.isSearching = true
                     searchDelay.stop()
                     root.lastSearchText = text
                     pamacBackend.search_packages_async(text)
