@@ -45,6 +45,12 @@ Kirigami.ApplicationWindow {
                         color: Kirigami.Theme.highlightColor
                         elide: Text.ElideRight
                         Layout.fillWidth: true
+                        
+                        MouseArea {
+                            anchors.fill: parent
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: if (pkg && pkg.url) Qt.openUrlExternally(pkg.url)
+                        }
                     }
                     Label {
                         Kirigami.FormData.label: qsTr("License:")
@@ -127,6 +133,7 @@ Kirigami.ApplicationWindow {
             }
             onAccepted: {
                 if (text.length > 2) {
+                    root.isSearching = true
                     searchDelay.stop()
                     pamacBackend.search_packages_async(text)
                 }
@@ -145,6 +152,7 @@ Kirigami.ApplicationWindow {
             interval: 600
             repeat: false
             onTriggered: {
+                root.isSearching = true
                 pamacBackend.search_packages_async(searchField.text)
             }
         }
