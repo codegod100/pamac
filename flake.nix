@@ -47,6 +47,14 @@
             sed -i "s/handle.disable_sandbox_filesystem = /handle.disable_sandbox = /" src/alpm_config.vala
             sed -i "/handle.disable_sandbox_syscalls = /d" src/alpm_config.vala
             
+            # Patch hardcoded config paths to check environment variables
+            sed -i 's|"/etc/pamac.conf"|GLib.Environment.get_variable("PAMAC_CONF") ?? "/etc/pamac.conf"|g' src/pamac_config.vala
+            sed -i 's|"/etc/pacman.conf"|GLib.Environment.get_variable("PACMAN_CONF") ?? "/etc/pacman.conf"|g' src/pamac_config.vala
+            
+            # Patch AlpmConfig defaults
+            sed -i 's|"/var/lib/pacman/"|GLib.Environment.get_variable("PACMAN_DBPATH") ?? "/var/lib/pacman/"|g' src/alpm_config.vala
+            sed -i 's|"/var/log/pacman.log"|GLib.Environment.get_variable("PACMAN_LOGFILE") ?? "/var/log/pacman.log"|g' src/alpm_config.vala
+            
             # Enable AUR by default in the installed config
             sed -i "s/#EnableAUR/EnableAUR/" data/config/pamac.conf
           '';
@@ -135,6 +143,8 @@
               --set GI_TYPELIB_PATH "${libpamac}/lib/girepository-1.0:${pkgs.glib.out}/lib/girepository-1.0:${pkgs.gobject-introspection.out}/lib/girepository-1.0" \
               --set LD_LIBRARY_PATH "${libpamac}/lib" \
               --set PAMAC_CONF "${libpamac}/etc/pamac.conf" \
+              --set PACMAN_CONF "/etc/pacman.conf" \
+              --set PACMAN_DBPATH "/var/lib/pacman/" \
               --set LIBGL_ALWAYS_SOFTWARE "1" \
               --set QT_QUICK_BACKEND "software" \
               --prefix PYTHONPATH : "$PYTHONPATH:${pkgs.python3Packages.pyside6}/${pkgs.python3.sitePackages}:${pkgs.python3Packages.pygobject3}/${pkgs.python3.sitePackages}" \
