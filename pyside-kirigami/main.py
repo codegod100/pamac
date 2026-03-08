@@ -15,6 +15,7 @@ from PySide6.QtCore import QObject, Slot, Signal, QTimer
 
 class PamacBackend(QObject):
     search_results_ready = Signal(list)
+    search_started = Signal()
     status_message = Signal(str)
 
     def __init__(self):
@@ -95,29 +96,53 @@ class PamacBackend(QObject):
                 return {}
 
             details = {
-                "name": pkg.get_name(),
-                "version": pkg.get_version(),
-                "description": pkg.get_desc() or "",
+                "name": pkg.props.name,
+                "version": pkg.props.version,
+                "description": pkg.props.desc or "",
                 "repository": repo,
-                "url": pkg.get_url() or "",
-                "license": pkg.get_license() or "",
-                "maintainer": pkg.get_packager() or "",
+                "url": pkg.props.url or "",
+                "license": pkg.props.license or "",
+                "maintainer": "",
             }
 
             if repo == "AUR":
-                details["votes"] = str(pkg.get_votes())
-                details["popularity"] = f"{pkg.get_popularity():.2f}"
-                details["maintainer"] = pkg.get_maintainer() or "None"
+                details["votes"] = str(pkg.props.numvotes)
+                details["popularity"] = f"{pkg.props.popularity:.2f}"
+                details["maintainer"] = pkg.props.maintainer or "None"
+            else:
+                details["maintainer"] = pkg.props.packager or ""
             
-            deps = pkg.get_depends()
-            details["depends"] = [deps.get(i) for i in range(deps.length)] if deps else []
+            # Final attempt at bulletproof dependency processing
+            details["depends"] = []
+            deps = pkg.props.depends
+            if deps is not None:
+                try:
+                    # Try list-like or iterable
+                    for d in deps:
+                        details["depends"].append(str(d))
+                except:
+                    try:
+                        # Try index-based access
+                        length = 0
+                        if hasattr(deps, "length"): length = deps.length
+                        elif hasattr(deps, "len"): length = deps.len
+                        else: length = len(deps)
+                        
+                        for i in range(length):
+                            try:
+                                d = deps.get(i) if hasattr(deps, "get") else deps[i]
+                                if d: details["depends"].append(str(d))
+                            except: break
+                    except: pass
+                
             return details
         except Exception as e:
-            print(f"Failed to get details: {e}")
+            print(f"Failed to get details for {name}: {e}")
             return {}
 
     @Slot(str)
     def search_packages_async(self, query):
+        self.search_started.emit()
         threading.Thread(target=self._perform_search, args=(query,), daemon=True).start()
 
     def _perform_search(self, query):
@@ -128,16 +153,16 @@ class PamacBackend(QObject):
         try:
             for pkg in self._db.search_pkgs(query):
                 results.append({
-                    "name": pkg.get_name(),
-                    "version": pkg.get_version(),
-                    "description": pkg.get_desc() or "",
-                    "repository": pkg.get_repo() or "Repo"
+                    "name": pkg.props.name,
+                    "version": pkg.props.version,
+                    "description": pkg.props.desc or "",
+                    "repository": pkg.props.repo or "Repo"
                 })
             for pkg in self._db.search_aur_pkgs(query):
                 results.append({
-                    "name": pkg.get_name(),
-                    "version": pkg.get_version(),
-                    "description": pkg.get_desc() or "",
+                    "name": pkg.props.name,
+                    "version": pkg.props.version,
+                    "description": pkg.props.desc or "",
                     "repository": "AUR"
                 })
         except Exception as e:

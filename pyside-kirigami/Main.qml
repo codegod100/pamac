@@ -127,7 +127,6 @@ Kirigami.ApplicationWindow {
             }
             onAccepted: {
                 if (text.length > 2) {
-                    root.isSearching = true
                     searchDelay.stop()
                     pamacBackend.search_packages_async(text)
                 }
@@ -146,7 +145,6 @@ Kirigami.ApplicationWindow {
             interval: 600
             repeat: false
             onTriggered: {
-                root.isSearching = true
                 pamacBackend.search_packages_async(searchField.text)
             }
         }
@@ -178,6 +176,9 @@ Kirigami.ApplicationWindow {
                         packageModel.append(results[i])
                     }
                     root.isSearching = false
+                }
+                function onSearch_started() {
+                    root.isSearching = true
                 }
             }
 
