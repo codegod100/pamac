@@ -112,13 +112,12 @@ Kirigami.ApplicationWindow {
                     }
                 }
                 
-                // Filler to push everything up
                 Item { Layout.fillHeight: true }
             }
         }
     }
 
-    pageStack.initialPage: Kirigami.ScrollablePage {
+    pageStack.initialPage: Kirigami.Page {
         id: mainPage
         title: qsTr("Software Management")
 
@@ -184,7 +183,6 @@ Kirigami.ApplicationWindow {
             text: searchField.text.length > 2 ? qsTr("No results found") : qsTr("Start typing to search...")
         }
 
-        // Overlay BusyIndicator
         BusyIndicator {
             id: busyIndicator
             anchors.centerIn: parent
@@ -195,10 +193,20 @@ Kirigami.ApplicationWindow {
 
         ListView {
             id: packageList
+            anchors.fill: parent
             model: ListModel { id: packageModel }
             clip: true
             visible: !root.isSearching || packageModel.count > 0
             
+            // Fix wonky scrollbar: stable bounds and reuse
+            boundsBehavior: Flickable.StopAtBounds
+            reuseItems: true
+            
+            // Add a proper scrollbar
+            ScrollBar.vertical: ScrollBar {
+                active: true
+            }
+
             Connections {
                 target: pamacBackend
                 function onSearch_results_ready(results) {
