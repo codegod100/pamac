@@ -58,7 +58,7 @@
             sed -i '/reload ();/a \ \ \ \ \ \ \ \ \ \ \ \ if (this.repo_order.length == 0) {\n\ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ var core = new AlpmRepo ("core");\n\ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ core.urls.add ("https://mirrors.kernel.org/archlinux/$repo/os/$arch");\n\ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ this.repo_order.add ((owned) core);\n\ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ var extra = new AlpmRepo ("extra");\n\ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ extra.urls.add ("https://mirrors.kernel.org/archlinux/$repo/os/$arch");\n\ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ this.repo_order.add ((owned) extra);\n\ \ \ \ \ \ \ \ \ \ \ \ }' src/alpm_config.vala
             
             # Disable siglevel for these forced repos
-            sed -i '/this.repo_order.add ((owned) extra);/a \ \ \ \ \ \ \ \ \ \ \ \ foreach (unowned AlpmRepo repo in this.repo_order) { repo.siglevel = Alpm.SigLevel.USE_DEFAULT; }' src/alpm_config.vala
+            sed -i '/this.repo_order.add ((owned) extra);/a \ \ \ \ \ \ \ \ \ \ \ \ foreach (unowned AlpmRepo repo in this.repo_order) { repo.siglevel = Alpm.SigLevel.PACKAGE | Alpm.SigLevel.DATABASE | Alpm.SigLevel.USE_DEFAULT; }' src/alpm_config.vala
             # Ensure parse_file also uses the potentially overridden conf_path
             sed -i 's|parse_file (conf_path)|parse_file (this.conf_path)|g' src/alpm_config.vala
             
