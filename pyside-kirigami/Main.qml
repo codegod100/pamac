@@ -9,61 +9,85 @@ Kirigami.ApplicationWindow {
     width: 800
     height: 600
 
-    pageStack.initialPage: Kirigami.Page {
+    pageStack.initialPage: Kirigami.ScrollablePage {
         title: qsTr("Software Management")
 
-        actions: [
-            Kirigami.Action {
-                text: qsTr("Search")
-                icon.name: "search"
-                onTriggered: searchField.forceActiveFocus()
+        footer: ToolBar {
+            contentItem: Label {
+                id: statusLabel
+                text: qsTr("Ready")
+                horizontalAlignment: Text.AlignHCenter
+                verticalAlignment: Text.AlignVCenter
+                elide: Text.ElideRight
             }
-        ]
+            Connections {
+                target: pamacBackend
+                function onStatus_message(msg) {
+                    statusLabel.text = msg
+                }
+            }
+        }
 
-        ColumnLayout {
-            anchors.fill: parent
-            spacing: Kirigami.Units.largeSpacing
+        header: Kirigami.SearchField {
+            id: searchField
+            placeholderText: qsTr("Search for packages...")
+            onTextChanged: searchDelay.restart()
+            Component.onCompleted: forceActiveFocus()
+        }
 
-            TextField {
-                id: searchField
-                Layout.fillWidth: true
-                placeholderText: qsTr("Search for packages...")
-                onTextChanged: {
-                    if (text.length > 2) {
-                        packageModel.clear()
-                        var results = pamacBackend.search_packages(text)
-                        for (var i = 0; i < results.length; i++) {
-                            packageModel.append(results[i])
-                        }
+        // Debounce search to keep UI snappy
+        Timer {
+            id: searchDelay
+            interval: 300
+            repeat: false
+            onTriggered: {
+                if (searchField.text.length > 2) {
+                    pamacBackend.search_packages_async(searchField.text)
+                } else {
+                    packageModel.clear()
+                }
+            }
+        }
+
+        Kirigami.PlaceholderMessage {
+            anchors.centerIn: parent
+            visible: packageModel.count === 0
+            text: searchField.text.length > 2 ? qsTr("No results found") : qsTr("Start typing to search...")
+        }
+
+        ListView {
+            id: packageList
+            model: ListModel { id: packageModel }
+            clip: true
+            
+            Connections {
+                target: pamacBackend
+                function onSearch_results_ready(results) {
+                    packageModel.clear()
+                    for (var i = 0; i < results.length; i++) {
+                        packageModel.append(results[i])
                     }
                 }
             }
 
-            ListView {
-                id: packageList
-                Layout.fillWidth: true
-                Layout.fillHeight: true
-                model: ListModel { id: packageModel }
-                delegate: Kirigami.AbstractCard {
-                    contentItem: Item {
-                        implicitHeight: delegateLayout.implicitHeight
-                        ColumnLayout {
-                            id: delegateLayout
-                            anchors.fill: parent
-                            Kirigami.Heading {
-                                text: model.name
-                                level: 2
-                            }
-                            Label {
-                                text: model.version + " (" + model.repository + ")"
-                                font.italic: true
-                            }
-                            Label {
-                                text: model.description
-                                wrapMode: Text.WordWrap
-                                Layout.fillWidth: true
-                            }
-                        }
+            delegate: Kirigami.AbstractCard {
+                contentItem: ColumnLayout {
+                    Kirigami.Heading {
+                        text: model.name
+                        level: 2
+                        Layout.fillWidth: true
+                    }
+                    Label {
+                        text: model.version + " (" + model.repository + ")"
+                        font.italic: true
+                        color: Kirigami.Theme.disabledTextColor
+                        Layout.fillWidth: true
+                    }
+                    Label {
+                        text: model.description
+                        wrapMode: Text.WordWrap
+                        Layout.fillWidth: true
+                        visible: model.description !== ""
                     }
                 }
             }

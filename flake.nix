@@ -4,6 +4,7 @@
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
     flake-utils.url = "github:numtide/flake-utils";
+    libpamac-src.url = "github:codegod100/libpamac-nix";
   };
 
   nixConfig = {
@@ -17,83 +18,11 @@
     ];
   };
 
-  outputs = { self, nixpkgs, flake-utils }:
+  outputs = { self, nixpkgs, flake-utils, libpamac-src }:
     flake-utils.lib.eachDefaultSystem (system:
       let
         pkgs = nixpkgs.legacyPackages.${system};
-
-        libpamac = pkgs.stdenv.mkDerivation {
-          pname = "libpamac";
-          version = "11.7.4";
-
-          src = pkgs.fetchFromGitHub {
-            owner = "manjaro";
-            repo = "libpamac";
-            rev = "master";
-            sha256 = "0r1452nzlvgf8mal7ydsa4hg0f7ryysjzskz9g2dwa5q4aznq5h8";
-          };
-
-          nativeBuildInputs = with pkgs; [
-            meson
-            ninja
-            vala
-            pkg-config
-            gettext
-            gobject-introspection
-          ];
-
-          postPatch = ''
-            sed -i "s/version : '>=16.0'/version : '>=15.0'/" src/meson.build
-            sed -i "s/handle.disable_sandbox_filesystem = /handle.disable_sandbox = /" src/alpm_config.vala
-            sed -i "/handle.disable_sandbox_syscalls = /d" src/alpm_config.vala
-            
-            # Patch hardcoded config paths to check environment variables
-            sed -i 's|"/etc/pamac.conf"|GLib.Environment.get_variable("PAMAC_CONF") ?? "/etc/pamac.conf"|g' src/pamac_config.vala
-            sed -i 's|"/etc/pacman.conf"|GLib.Environment.get_variable("PACMAN_CONF") ?? "/etc/pacman.conf"|g' src/pamac_config.vala
-            
-            # Additional check: make sure AlpmConfig constructor in src/pamac_config.vala is also patched
-            sed -i 's|new AlpmConfig ("/etc/pacman.conf")|new AlpmConfig (GLib.Environment.get_variable("PACMAN_CONF") ?? "/etc/pacman.conf")|g' src/pamac_config.vala
-            
-            # Force add repos if repo_order is empty after reload
-            sed -i '/reload ();/a \ \ \ \ \ \ \ \ \ \ \ \ if (this.repo_order.length == 0) {\n\ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ var core = new AlpmRepo ("core");\n\ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ core.urls.add ("https://mirrors.kernel.org/archlinux/$repo/os/$arch");\n\ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ this.repo_order.add ((owned) core);\n\ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ var extra = new AlpmRepo ("extra");\n\ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ extra.urls.add ("https://mirrors.kernel.org/archlinux/$repo/os/$arch");\n\ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ this.repo_order.add ((owned) extra);\n\ \ \ \ \ \ \ \ \ \ \ \ }' src/alpm_config.vala
-            
-            # Disable siglevel for these forced repos
-            sed -i '/this.repo_order.add ((owned) extra);/a \ \ \ \ \ \ \ \ \ \ \ \ foreach (unowned AlpmRepo repo in this.repo_order) { repo.siglevel = Alpm.SigLevel.PACKAGE | Alpm.SigLevel.DATABASE | Alpm.SigLevel.USE_DEFAULT; }' src/alpm_config.vala
-            # Ensure parse_file also uses the potentially overridden conf_path
-            sed -i 's|parse_file (conf_path)|parse_file (this.conf_path)|g' src/alpm_config.vala
-            
-            # Patch AlpmConfig defaults for DBPath and LogFile
-            sed -i 's|"/var/lib/pacman/"|GLib.Environment.get_variable("PACMAN_DBPATH") ?? "/var/lib/pacman/"|g' src/alpm_config.vala
-            sed -i 's|"/var/log/pacman.log"|GLib.Environment.get_variable("PACMAN_LOGFILE") ?? "/var/log/pacman.log"|g' src/alpm_config.vala
-            
-            # Ensure architectures are set from config or default
-            sed -i 's|if (key == "Architecture") {|if (key == "Architecture") {\n\ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ if (val == "auto") val = "x86_64";|g' src/alpm_config.vala
-            
-            # Enable AUR by default in the installed config
-            sed -i "s/#EnableAUR/EnableAUR/" data/config/pamac.conf
-          '';
-
-          buildInputs = with pkgs; [
-            glib
-            pacman
-            libarchive
-            json-glib
-            libsoup_3
-            polkit
-            appstream
-            flatpak
-          ];
-
-          mesonFlags = [
-            "--sysconfdir=/etc"
-            "--localstatedir=/var"
-          ];
-
-          # We need to use install_dir to avoid installing to /etc
-          preConfigure = ''
-            export mesonFlags="$mesonFlags --sysconfdir=$out/etc"
-          '';
-        };
+        libpamac = libpamac-src.packages.${system}.libpamac;
 
         pamac = pkgs.stdenv.mkDerivation {
           pname = "pamac";

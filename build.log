@@ -1,0 +1,4 @@
+[K[KUsing saved setting for 'extra-substituters = https://cache.garnix.io' from ~/.local/share/nix/trusted-settings.json.
+Using saved setting for 'extra-trusted-public-keys = cache.garnix.io:CTFPyKSLcx5RMJKfLo5EEPUObbA78b0YQ2DTCJXqr9g=' from ~/.local/share/nix/trusted-settings.json.
+warning: ignoring untrusted substituter 'https://cache.garnix.io', you are not a trusted user.
+Run `man nix.conf` for more information on the `substituters` configuration option.
