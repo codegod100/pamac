@@ -54,8 +54,10 @@
             # Additional check: make sure AlpmConfig constructor in src/pamac_config.vala is also patched
             sed -i 's|new AlpmConfig ("/etc/pacman.conf")|new AlpmConfig (GLib.Environment.get_variable("PACMAN_CONF") ?? "/etc/pacman.conf")|g' src/pamac_config.vala
             
-            # Patch AlpmConfig.vala to use env var if path is /etc/pacman.conf
-            sed -i 's|parse_file (conf_path)|parse_file (GLib.Environment.get_variable("PACMAN_CONF") ?? conf_path)|g' src/alpm_config.vala
+            # Patch AlpmConfig.vala to use env var for EVERYTHING
+            sed -i 's|parse_file (conf_path)|parse_file (GLib.Environment.get_variable("PACMAN_CONF") ?? "/etc/pacman.conf")|g' src/alpm_config.vala
+            sed -i 's|AlpmConfig (string path)|AlpmConfig (string _unused_path)|g' src/alpm_config.vala
+            sed -i 's|conf_path = path;|conf_path = GLib.Environment.get_variable("PACMAN_CONF") ?? "/etc/pacman.conf";|g' src/alpm_config.vala
 
             # Patch AlpmConfig defaults
             sed -i 's|"/var/lib/pacman/"|GLib.Environment.get_variable("PACMAN_DBPATH") ?? "/var/lib/pacman/"|g' src/alpm_config.vala
