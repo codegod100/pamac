@@ -51,6 +51,10 @@
             sed -i 's|"/etc/pamac.conf"|GLib.Environment.get_variable("PAMAC_CONF") ?? "/etc/pamac.conf"|g' src/pamac_config.vala
             sed -i 's|"/etc/pacman.conf"|GLib.Environment.get_variable("PACMAN_CONF") ?? "/etc/pacman.conf"|g' src/pamac_config.vala
             
+            # Additional check: make sure AlpmConfig constructor in src/pamac_config.vala is also patched
+            # It usually looks like: alpm_config = new AlpmConfig ("/etc/pacman.conf");
+            sed -i 's|new AlpmConfig ("/etc/pacman.conf")|new AlpmConfig (GLib.Environment.get_variable("PACMAN_CONF") ?? "/etc/pacman.conf")|g' src/pamac_config.vala
+            
             # Patch AlpmConfig defaults
             sed -i 's|"/var/lib/pacman/"|GLib.Environment.get_variable("PACMAN_DBPATH") ?? "/var/lib/pacman/"|g' src/alpm_config.vala
             sed -i 's|"/var/log/pacman.log"|GLib.Environment.get_variable("PACMAN_LOGFILE") ?? "/var/log/pacman.log"|g' src/alpm_config.vala
@@ -142,7 +146,7 @@
               --add-flags "$out/share/pyside-pamac/main.py" \
               --set GI_TYPELIB_PATH "${libpamac}/lib/girepository-1.0:${pkgs.glib.out}/lib/girepository-1.0:${pkgs.gobject-introspection.out}/lib/girepository-1.0" \
               --set LD_LIBRARY_PATH "${libpamac}/lib" \
-              --set PAMAC_CONF "${libpamac}/etc/pamac.conf" \
+              --set PAMAC_CONF "/etc/pamac.conf" \
               --set PACMAN_CONF "/etc/pacman.conf" \
               --set PACMAN_DBPATH "/var/lib/pacman/" \
               --set LIBGL_ALWAYS_SOFTWARE "1" \
