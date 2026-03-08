@@ -132,6 +132,8 @@
               --set GI_TYPELIB_PATH "${libpamac}/lib/girepository-1.0:${pkgs.glib.out}/lib/girepository-1.0:${pkgs.gobject-introspection.out}/lib/girepository-1.0" \
               --set LD_LIBRARY_PATH "${libpamac}/lib" \
               --set PAMAC_CONF "${libpamac}/etc/pamac.conf" \
+              --set LIBGL_ALWAYS_SOFTWARE "1" \
+              --set QT_QUICK_BACKEND "software" \
               --prefix PYTHONPATH : "$PYTHONPATH:${pkgs.python3Packages.pyside6}/${pkgs.python3.sitePackages}:${pkgs.python3Packages.pygobject3}/${pkgs.python3.sitePackages}" \
               --prefix QML2_IMPORT_PATH : "${pkgs.kdePackages.kirigami}/lib/qt-6/qml"
           '';
