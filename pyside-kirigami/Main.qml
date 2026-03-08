@@ -119,11 +119,17 @@ Kirigami.ApplicationWindow {
             placeholderText: qsTr("Search for packages...")
             onTextChanged: {
                 if (text.length > 2) {
-                    root.isSearching = true
                     searchDelay.restart()
                 } else {
                     root.isSearching = false
                     packageModel.clear()
+                }
+            }
+            onAccepted: {
+                if (text.length > 2) {
+                    root.isSearching = true
+                    searchDelay.stop()
+                    pamacBackend.search_packages_async(text)
                 }
             }
         }
@@ -137,9 +143,10 @@ Kirigami.ApplicationWindow {
 
         Timer {
             id: searchDelay
-            interval: 300
+            interval: 600
             repeat: false
             onTriggered: {
+                root.isSearching = true
                 pamacBackend.search_packages_async(searchField.text)
             }
         }
@@ -154,6 +161,7 @@ Kirigami.ApplicationWindow {
             anchors.centerIn: parent
             running: root.isSearching
             visible: running
+            z: 100
         }
 
         ListView {
