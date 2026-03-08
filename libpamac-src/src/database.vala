@@ -72,6 +72,7 @@ namespace Pamac {
 					}
 					// register syncdbs with a callback if database file is missing
 					alpm_handle.set_eventcb (cb_evt, this);
+                message ("DEBUG: Calling register_syncdbs\n");
 					alpm_config.register_syncdbs (alpm_handle);
 					// files handle
 					files_handle = alpm_config.get_handle (true);
@@ -136,6 +137,7 @@ namespace Pamac {
 					foreach (unowned string name in config.ignorepkgs) {
 						alpm_handle.add_ignorepkg (name);
 					}
+                message ("DEBUG: Calling register_syncdbs\n");
 					alpm_config.register_syncdbs (alpm_handle);
 					// files handle
 					files_handle = alpm_config.get_handle (true);

@@ -90,6 +90,16 @@ internal class AlpmConfig {
 		repo_order = new GenericArray<AlpmRepo> ();
 		// parse conf file
 		parse_file (this.conf_path);
+        if (this.repo_order.length == 0) { 
+            var core = new AlpmRepo ("core"); 
+            core.urls.add ("https://mirrors.kernel.org/archlinux/$repo/os/$arch"); 
+            core.siglevel = Alpm.Signature.Level.USE_DEFAULT; 
+            this.repo_order.add ((owned) core); 
+            var extra = new AlpmRepo ("extra"); 
+            extra.urls.add ("https://mirrors.kernel.org/archlinux/$repo/os/$arch"); 
+            extra.siglevel = Alpm.Signature.Level.USE_DEFAULT; 
+            this.repo_order.add ((owned) extra); 
+        }
 		// if rootdir is set and dbpath/logfile are not
 		// set, then set those as well to reside under the root.
 		if (rootdir != null) {
@@ -222,6 +232,7 @@ internal class AlpmConfig {
 	}
 
 	public void register_syncdbs (Alpm.Handle handle) {
+        message ("DEBUG: repo_order length: %d\n", this.repo_order.length);
 		foreach (unowned AlpmRepo repo in repo_order) {
 			repo.siglevel = merge_siglevel (siglevel, repo.siglevel, repo.siglevel_mask);
 			unowned Alpm.DB db = handle.register_syncdb (repo.name, repo.siglevel);
