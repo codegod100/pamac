@@ -175,8 +175,14 @@ Kirigami.ApplicationWindow {
                 visible: selectedPackage && selectedPackage.depends && selectedPackage.depends.length > 0
                 Repeater {
                     model: selectedPackage ? selectedPackage.depends : []
-                    delegate: Kirigami.Badge {
+                    delegate: Label {
                         text: modelData
+                        padding: Kirigami.Units.smallSpacing
+                        background: Rectangle {
+                            color: Kirigami.Theme.highlightColor
+                            opacity: 0.2
+                            radius: Kirigami.Units.smallSpacing
+                        }
                     }
                 }
             }
