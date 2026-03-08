@@ -15,12 +15,14 @@ from PySide6.QtQml import QQmlApplicationEngine
 from PySide6.QtCore import QObject, Slot, Signal, QTimer
 
 class PamacBackend(QObject):
-    search_results_ready = Signal(list)
+    search_results_ready = Signal(list, int)
     search_started = Signal()
     status_message = Signal(str)
 
     def __init__(self):
         super().__init__()
+        self._search_seq = 0
+        self._search_cache = {}
         
         system_pacman_conf = "/etc/pacman.conf"
         user_config_dir = os.path.expanduser("~/.config/pamac")
@@ -93,8 +95,7 @@ class PamacBackend(QObject):
             else:
                 pkg = self._db.get_sync_pkg(name)
             
-            if not pkg:
-                return {}
+            if not pkg: return {}
 
             details = {
                 "name": pkg.props.name,
@@ -115,20 +116,15 @@ class PamacBackend(QObject):
             
             details["depends"] = []
             deps = pkg.props.depends
-            if deps is not None:
+            if deps:
                 try:
-                    for d in deps:
-                        details["depends"].append(str(d))
-                except:
-                    try:
-                        length = getattr(deps, "length", getattr(deps, "len", 0))
-                        for i in range(length):
-                            try:
-                                d = deps.get(i) if hasattr(deps, "get") else deps[i]
-                                if d: details["depends"].append(str(d))
-                            except: break
-                    except: pass
-                
+                    for i in range(1000):
+                        try:
+                            d = deps.get(i) if hasattr(deps, "get") else deps[i]
+                            if d: details["depends"].append(str(d))
+                            else: break
+                        except: break
+                except: pass
             return details
         except Exception as e:
             print(f"Failed to get details for {name}: {e}")
@@ -137,59 +133,70 @@ class PamacBackend(QObject):
     @Slot(str)
     def open_url(self, url):
         if not url: return
-        print(f"Force opening URL in new window: {url}")
-        
-        # Try specific browser commands for new window
         opened = False
-        for cmd in [
-            ["firefox", "--new-window"],
-            ["google-chrome", "--new-window"],
-            ["chromium", "--new-window"],
-            ["brave", "--new-window"]
-        ]:
+        for cmd in [["firefox", "--new-window"], ["google-chrome", "--new-window"], ["chromium", "--new-window"], ["brave", "--new-window"]]:
             try:
                 subprocess.Popen(cmd + [url], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
                 opened = True
                 break
-            except FileNotFoundError:
-                continue
-        
+            except FileNotFoundError: continue
         if not opened:
-            # Fallback to standard webbrowser
             try:
                 import webbrowser
                 webbrowser.open_new(url)
-            except:
-                subprocess.Popen(["xdg-open", url])
+            except: subprocess.Popen(["xdg-open", url])
 
     @Slot(str)
     def search_packages_async(self, query):
-        self.search_started.emit()
-        threading.Thread(target=self._perform_search, args=(query,), daemon=True).start()
+        self._search_seq += 1
+        current_seq = self._search_seq
+        print(f"DEBUG: Starting search for '{query}' (seq: {current_seq})")
+        
+        if query in self._search_cache:
+            print(f"DEBUG: Cache hit for: {query}")
+            GLib.idle_add(self.search_results_ready.emit, self._search_cache[query], current_seq)
+            return
 
-    def _perform_search(self, query):
+        self.search_started.emit()
+        threading.Thread(target=self._perform_search, args=(query, current_seq), daemon=True).start()
+
+    def _perform_search(self, query, seq):
         if not query or len(query) < 2:
-            GLib.idle_add(self.search_results_ready.emit, [])
+            GLib.idle_add(self.search_results_ready.emit, [], seq)
             return
         results = []
         try:
-            for pkg in self._db.search_pkgs(query):
+            # Search official repos
+            repo_pkgs = self._db.search_pkgs(query)
+            print(f"DEBUG: Found {len(repo_pkgs)} repo results for '{query}'")
+            for pkg in repo_pkgs:
                 results.append({
                     "name": pkg.props.name,
                     "version": pkg.props.version,
                     "description": pkg.props.desc or "",
                     "repository": pkg.props.repo or "Repo"
                 })
-            for pkg in self._db.search_aur_pkgs(query):
+            
+            results.sort(key=lambda x: x["name"])
+
+            # Search AUR
+            aur_pkgs = self._db.search_aur_pkgs(query)
+            print(f"DEBUG: Found {len(aur_pkgs)} AUR results for '{query}'")
+            for pkg in aur_pkgs:
                 results.append({
                     "name": pkg.props.name,
                     "version": pkg.props.version,
                     "description": pkg.props.desc or "",
                     "repository": "AUR"
                 })
+            
+            self._search_cache[query] = results
+            
         except Exception as e:
-            print(f"Search failed: {e}")
-        GLib.idle_add(self.search_results_ready.emit, results)
+            print(f"DEBUG: Search error: {e}")
+        
+        print(f"DEBUG: Emitting {len(results)} results for seq {seq}")
+        GLib.idle_add(self.search_results_ready.emit, results, seq)
 
 if __name__ == "__main__":
     signal.signal(signal.SIGINT, signal.SIG_DFL)
