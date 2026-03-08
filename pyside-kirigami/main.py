@@ -5,6 +5,7 @@ import threading
 import platform
 import signal
 import subprocess
+import queue
 
 # Ensure GObject Introspection can find Pamac
 gi.require_version('Pamac', '11')
@@ -23,6 +24,7 @@ class PamacBackend(QObject):
         super().__init__()
         self._search_seq = 0
         self._search_cache = {}
+        self._search_queue = queue.Queue()
         
         system_pacman_conf = "/etc/pacman.conf"
         user_config_dir = os.path.expanduser("~/.config/pamac")
@@ -38,7 +40,6 @@ class PamacBackend(QObject):
         self.conf_path = os.path.join(user_config_dir, "pamac.conf")
         os.environ["PAMAC_CONF"] = self.conf_path
 
-        # Setup local pacman.conf if not on Arch
         if not os.path.exists(os.environ["PACMAN_CONF"]):
             with open(os.environ["PACMAN_CONF"], 'w') as f:
                 f.write(f"[options]\nDBPath = {self.user_db_path}\nSigLevel = Never\n\n"
@@ -49,16 +50,17 @@ class PamacBackend(QObject):
             with open(self.conf_path, 'w') as f:
                 f.write("EnableAUR\n")
 
-        # Initializing Pamac objects
+        # Initializing Pamac objects (must happen in main thread)
         self._config = Pamac.Config(conf_path=self.conf_path)
         self._config.set_enable_aur(True)
         self._db = Pamac.Database(config=self._config)
-        self._transaction = Pamac.Transaction(database=self._db)
         
+        # Start persistent worker thread
+        threading.Thread(target=self._search_worker, daemon=True).start()
+        # Start maintenance thread
         threading.Thread(target=self._bg_maintenance, daemon=True).start()
 
     def _bg_maintenance(self):
-        # Symlink system DBs if possible
         system_sync = "/var/lib/pacman/sync"
         if os.path.exists(system_sync):
             for db in ["core.db", "extra.db"]:
@@ -67,52 +69,68 @@ class PamacBackend(QObject):
                 if os.path.exists(src) and not os.path.exists(dst):
                     try: os.symlink(src, dst)
                     except: pass
-
-        # Ensure AUR metadata
         aur_dest = os.path.join(self.sync_dir, "packages-meta-ext-v1.json.gz")
         if not os.path.exists(aur_dest):
             self.status_message.emit("Downloading AUR metadata...")
-            self._download("https://aur.archlinux.org/packages-meta-ext-v1.json.gz", aur_dest)
-        
+            try:
+                import urllib.request
+                urllib.request.urlretrieve("https://aur.archlinux.org/packages-meta-ext-v1.json.gz", aur_dest)
+            except: pass
         self.status_message.emit("Ready")
-        GLib.idle_add(self._initial_refresh)
 
-    def _download(self, url, dest):
-        try:
-            import urllib.request
-            urllib.request.urlretrieve(url, dest)
-        except: pass
-
-    def _initial_refresh(self):
-        self._transaction.check_dbs(None, lambda o, r: None)
+    def _search_worker(self):
+        while True:
+            query, seq = self._search_queue.get()
+            if query is None: break # Shutdown signal
+            
+            # Check if this search is already outdated
+            if seq < self._search_seq:
+                self._search_queue.task_done()
+                continue
+                
+            results = []
+            try:
+                # Sync search calls
+                repo_pkgs = self._db.search_pkgs(query)
+                for pkg in repo_pkgs:
+                    results.append({
+                        "name": pkg.props.name, "version": pkg.props.version,
+                        "description": pkg.props.desc or "", "repository": pkg.props.repo or "Repo"
+                    })
+                results.sort(key=lambda x: x["name"])
+                
+                if seq == self._search_seq:
+                    aur_pkgs = self._db.search_aur_pkgs(query)
+                    for pkg in aur_pkgs:
+                        results.append({
+                            "name": pkg.props.name, "version": pkg.props.version,
+                            "description": pkg.props.desc or "", "repository": "AUR"
+                        })
+                
+                # Emit results directly (PySide6 signals are thread-safe)
+                if seq >= self._search_seq:
+                    self._search_cache[query] = results
+                    self.search_results_ready.emit(results, seq)
+            except Exception as e:
+                print(f"Search worker error: {e}")
+                self.search_results_ready.emit([], seq)
+            
+            self._search_queue.task_done()
 
     @Slot(str, str, result="QVariantMap")
     def get_package_details(self, name, repo):
         try:
-            pkg = None
-            if repo == "AUR":
-                pkg = self._db.get_aur_pkg(name)
-            else:
-                pkg = self._db.get_sync_pkg(name)
-            
+            pkg = self._db.get_aur_pkg(name) if repo == "AUR" else self._db.get_sync_pkg(name)
             if not pkg: return {}
-
             details = {
-                "name": pkg.props.name,
-                "version": pkg.props.version,
-                "description": pkg.props.desc or "",
-                "repository": repo,
-                "url": pkg.props.url or "",
-                "license": pkg.props.license or "",
-                "maintainer": "",
+                "name": pkg.props.name, "version": pkg.props.version, "description": pkg.props.desc or "",
+                "repository": repo, "url": pkg.props.url or "", "license": pkg.props.license or "", "maintainer": "",
             }
-
             if repo == "AUR":
                 details["votes"] = str(pkg.props.numvotes)
                 details["popularity"] = f"{pkg.props.popularity:.2f}"
                 details["maintainer"] = pkg.props.maintainer or "None"
-            else:
-                details["maintainer"] = pkg.props.packager or ""
+            else: details["maintainer"] = pkg.props.packager or ""
             
             details["depends"] = []
             deps = pkg.props.depends
@@ -127,76 +145,32 @@ class PamacBackend(QObject):
                 except: pass
             return details
         except Exception as e:
-            print(f"Failed to get details for {name}: {e}")
+            print(f"Details error: {e}")
             return {}
 
     @Slot(str)
     def open_url(self, url):
         if not url: return
-        opened = False
-        for cmd in [["firefox", "--new-window"], ["google-chrome", "--new-window"], ["chromium", "--new-window"], ["brave", "--new-window"]]:
+        for cmd in [["firefox", "--new-window"], ["google-chrome", "--new-window"], ["chromium", "--new-window"]]:
             try:
                 subprocess.Popen(cmd + [url], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-                opened = True
-                break
+                return
             except FileNotFoundError: continue
-        if not opened:
-            try:
-                import webbrowser
-                webbrowser.open_new(url)
-            except: subprocess.Popen(["xdg-open", url])
+        try:
+            import webbrowser
+            webbrowser.open_new(url)
+        except: subprocess.Popen(["xdg-open", url])
 
     @Slot(str)
     def search_packages_async(self, query):
         self._search_seq += 1
         current_seq = self._search_seq
-        print(f"DEBUG: Starting search for '{query}' (seq: {current_seq})")
-        
         if query in self._search_cache:
-            print(f"DEBUG: Cache hit for: {query}")
-            GLib.idle_add(self.search_results_ready.emit, self._search_cache[query], current_seq)
+            self.search_results_ready.emit(self._search_cache[query], current_seq)
             return
-
-        self.search_started.emit()
-        threading.Thread(target=self._perform_search, args=(query, current_seq), daemon=True).start()
-
-    def _perform_search(self, query, seq):
-        if not query or len(query) < 2:
-            GLib.idle_add(self.search_results_ready.emit, [], seq)
-            return
-        results = []
-        try:
-            # Search official repos
-            repo_pkgs = self._db.search_pkgs(query)
-            print(f"DEBUG: Found {len(repo_pkgs)} repo results for '{query}'")
-            for pkg in repo_pkgs:
-                results.append({
-                    "name": pkg.props.name,
-                    "version": pkg.props.version,
-                    "description": pkg.props.desc or "",
-                    "repository": pkg.props.repo or "Repo"
-                })
-            
-            results.sort(key=lambda x: x["name"])
-
-            # Search AUR
-            aur_pkgs = self._db.search_aur_pkgs(query)
-            print(f"DEBUG: Found {len(aur_pkgs)} AUR results for '{query}'")
-            for pkg in aur_pkgs:
-                results.append({
-                    "name": pkg.props.name,
-                    "version": pkg.props.version,
-                    "description": pkg.props.desc or "",
-                    "repository": "AUR"
-                })
-            
-            self._search_cache[query] = results
-            
-        except Exception as e:
-            print(f"DEBUG: Search error: {e}")
         
-        print(f"DEBUG: Emitting {len(results)} results for seq {seq}")
-        GLib.idle_add(self.search_results_ready.emit, results, seq)
+        self.search_started.emit()
+        self._search_queue.put((query, current_seq))
 
 if __name__ == "__main__":
     signal.signal(signal.SIGINT, signal.SIG_DFL)
@@ -208,6 +182,5 @@ if __name__ == "__main__":
     backend = PamacBackend()
     engine.rootContext().setContextProperty("pamacBackend", backend)
     engine.load(os.path.join(os.path.dirname(__file__), "Main.qml"))
-    if not engine.rootObjects():
-        sys.exit(-1)
+    if not engine.rootObjects(): sys.exit(-1)
     sys.exit(app.exec())

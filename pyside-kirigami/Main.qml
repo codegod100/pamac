@@ -9,13 +9,34 @@ Kirigami.ApplicationWindow {
     width: 1000
     height: 800
 
-    // Set a larger default font size and clean font family
     font.pointSize: 14
     font.family: "sans-serif"
 
     property bool isSearching: false
     property string lastSearchText: ""
     property int currentSearchSeq: 0
+
+    // Centralized connections
+    Connections {
+        target: pamacBackend
+        function onSearch_results_ready(results, seq) {
+            console.log("DEBUG: QML received " + results.length + " results for seq " + seq + " (current: " + root.currentSearchSeq + ")")
+            if (seq >= root.currentSearchSeq) {
+                packageModel.clear()
+                for (var i = 0; i < results.length; i++) {
+                    packageModel.append(results[i])
+                }
+                root.isSearching = false
+                root.currentSearchSeq = seq
+            }
+        }
+        function onSearch_started() {
+            root.isSearching = true
+        }
+        function onStatus_message(msg) {
+            statusLabel.text = msg
+        }
+    }
 
     Component {
         id: detailsPage
@@ -133,12 +154,6 @@ Kirigami.ApplicationWindow {
                 elide: Text.ElideRight
                 font.pointSize: 12
             }
-            Connections {
-                target: pamacBackend
-                function onStatus_message(msg) {
-                    statusLabel.text = msg
-                }
-            }
         }
 
         header: Kirigami.SearchField {
@@ -160,7 +175,6 @@ Kirigami.ApplicationWindow {
             onAccepted: {
                 if (text === root.lastSearchText) return;
                 if (text.length > 2) {
-                    console.log("DEBUG: Search accepted for: " + text)
                     root.isSearching = true
                     searchDelay.stop()
                     root.lastSearchText = text
@@ -182,7 +196,6 @@ Kirigami.ApplicationWindow {
             interval: 600
             repeat: false
             onTriggered: {
-                console.log("DEBUG: searchDelay triggered for: " + searchField.text)
                 root.isSearching = true
                 root.lastSearchText = searchField.text
                 root.currentSearchSeq++
@@ -196,46 +209,25 @@ Kirigami.ApplicationWindow {
             text: searchField.text.length > 2 ? qsTr("No results found") : qsTr("Start typing to search...")
         }
 
+        BusyIndicator {
+            anchors.centerIn: parent
+            running: root.isSearching
+            visible: running
+            z: 1000
+        }
+
         ListView {
             id: packageList
             anchors.fill: parent
             model: ListModel { id: packageModel }
             clip: true
-            
-            // Overlays BusyIndicator on top of list
-            BusyIndicator {
-                anchors.centerIn: parent
-                running: root.isSearching
-                visible: running
-                z: 1000
-            }
+            visible: packageModel.count > 0 || !root.isSearching
             
             boundsBehavior: Flickable.StopAtBounds
             reuseItems: true
             
             ScrollBar.vertical: ScrollBar {
                 active: true
-            }
-
-            Connections {
-                target: pamacBackend
-                function onSearch_results_ready(results, seq) {
-                    console.log("DEBUG: QML received " + results.length + " results for seq " + seq + " (current: " + root.currentSearchSeq + ")")
-                    if (seq >= root.currentSearchSeq) {
-                        packageModel.clear()
-                        for (var i = 0; i < results.length; i++) {
-                            packageModel.append(results[i])
-                        }
-                        root.isSearching = false
-                        root.currentSearchSeq = seq
-                    } else {
-                        console.log("DEBUG: Ignoring outdated results for seq " + seq)
-                    }
-                }
-                function onSearch_started() {
-                    console.log("DEBUG: QML Search started")
-                    root.isSearching = true
-                }
             }
 
             delegate: Kirigami.AbstractCard {
@@ -262,7 +254,6 @@ Kirigami.ApplicationWindow {
                     }
                 }
                 onClicked: {
-                    console.log("DEBUG: Clicked " + model.name)
                     var details = pamacBackend.get_package_details(model.name, model.repository)
                     if (details && details.name) {
                         pageStack.push(detailsPage, { "pkg": details })
